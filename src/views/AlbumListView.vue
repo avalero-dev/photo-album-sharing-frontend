@@ -64,6 +64,7 @@ onMounted(load)
           <td>{{ album.quota }}</td>
           <td><span class="status">{{ album.status }}</span></td>
           <td>
+            <RouterLink :to="{ name: 'album-photos', params: { id: album.id } }">Fotos</RouterLink>
             <RouterLink :to="{ name: 'album-edit', params: { id: album.id } }">Editar</RouterLink>
           </td>
         </tr>

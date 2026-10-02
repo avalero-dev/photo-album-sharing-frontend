@@ -109,6 +109,12 @@ export async function listAlbums(): Promise<Album[]> {
   return response.json() as Promise<Album[]>
 }
 
+export async function getAlbum(id: number): Promise<Album> {
+  const response = await fetch(`${API_BASE_URL}/api/albums/${id}`, { credentials: 'include' })
+  await ensureOk(response)
+  return response.json() as Promise<Album>
+}
+
 export async function createAlbum(input: AlbumInput): Promise<Album> {
   const response = await fetch(`${API_BASE_URL}/api/albums`, {
     method: 'POST',
@@ -151,4 +157,61 @@ export async function unlockAlbum(token: string, password: string): Promise<Publ
   )
   await ensureOk(response)
   return response.json() as Promise<PublicAlbum>
+}
+
+export interface AdminPhoto {
+  id: number
+  albumId: number
+  baseFilename: string
+  position: number
+  selectedAt: string | null
+  webKey: string
+  thumbKey: string
+  originalKey: string | null
+  createdAt: string
+}
+
+export async function listAdminPhotos(albumId: number): Promise<AdminPhoto[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/admin/albums/${albumId}/photos`,
+    { credentials: 'include' },
+  )
+  await ensureOk(response)
+  return response.json() as Promise<AdminPhoto[]>
+}
+
+export async function uploadAdminPhotos(
+  albumId: number,
+  files: File[],
+): Promise<{ uploaded: number; photos: AdminPhoto[] }> {
+  const form = new FormData()
+  for (const file of files) {
+    form.append('files', file)
+  }
+  const response = await fetch(
+    `${API_BASE_URL}/api/admin/albums/${albumId}/photos`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      body: form,
+    },
+  )
+  await ensureOk(response)
+  return response.json() as Promise<{ uploaded: number; photos: AdminPhoto[] }>
+}
+
+export async function deleteAdminPhoto(albumId: number, photoId: number): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/admin/albums/${albumId}/photos/${photoId}`,
+    { method: 'DELETE', credentials: 'include' },
+  )
+  await ensureOk(response)
+}
+
+export function publicPhotoUrl(token: string, photoId: number, variant: 'thumb' | 'web' | 'original'): string {
+  return `${API_BASE_URL}/api/public/albums/${encodeURIComponent(token)}/photos/${photoId}/${variant}`
+}
+
+export function adminPhotoUrl(albumId: number, photoId: number, variant: 'thumb' | 'web' | 'original'): string {
+  return `${API_BASE_URL}/api/admin/albums/${albumId}/photos/${photoId}/${variant}`
 }

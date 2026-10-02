@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ApiError, getPublicAlbum, unlockAlbum, type PublicAlbum } from '@/services/api'
+import {
+  ApiError,
+  getPublicAlbum,
+  publicPhotoUrl,
+  unlockAlbum,
+  type PublicAlbum,
+} from '@/services/api'
 
 const route = useRoute()
 const token = String(route.params.token)
@@ -69,7 +75,14 @@ onMounted(load)
         <p class="meta">Se entregan hasta {{ album.quota }} fotos.</p>
         <p v-if="album.photos.length === 0">Este álbum todavía no tiene fotos.</p>
         <ul v-else class="grid">
-          <li v-for="photo in album.photos" :key="photo.id">{{ photo.baseFilename }}</li>
+          <li v-for="photo in album.photos" :key="photo.id">
+            <img
+              :src="publicPhotoUrl(token, photo.id, 'thumb')"
+              :alt="photo.baseFilename"
+              loading="lazy"
+            />
+            <span class="filename">{{ photo.baseFilename }}</span>
+          </li>
         </ul>
       </section>
     </template>
@@ -123,10 +136,28 @@ button {
 }
 
 .grid li {
-  padding: 0.5rem;
   border: 1px solid var(--color-border);
   border-radius: 4px;
+  overflow: hidden;
+  background: var(--color-background-soft);
+  display: flex;
+  flex-direction: column;
+}
+
+.grid img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  background: #f3f3f3;
+}
+
+.filename {
+  padding: 0.5rem;
   font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .error {

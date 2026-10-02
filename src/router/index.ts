@@ -33,6 +33,12 @@ const router = createRouter({
       component: () => import('@/views/AlbumFormView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/admin/albums/:id/photos',
+      name: 'album-photos',
+      component: () => import('@/views/AdminAlbumPhotosView.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 
