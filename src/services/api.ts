@@ -32,6 +32,7 @@ export interface PublicPhoto {
   id: number
   baseFilename: string
   selected: boolean
+  hasOriginal: boolean
 }
 
 export interface PublicAlbum {
@@ -138,6 +139,15 @@ export async function updateAlbum(id: number, input: AlbumInput): Promise<Album>
   return response.json() as Promise<Album>
 }
 
+export async function openAlbumDelivery(id: number): Promise<Album> {
+  const response = await fetch(`${API_BASE_URL}/api/albums/${id}/open-delivery`, {
+    method: 'POST',
+    credentials: 'include',
+  })
+  await ensureOk(response)
+  return response.json() as Promise<Album>
+}
+
 export async function getPublicAlbum(token: string): Promise<PublicAlbum> {
   const response = await fetch(`${API_BASE_URL}/api/public/albums/${encodeURIComponent(token)}`, {
     credentials: 'include',
@@ -239,8 +249,39 @@ export async function deleteAdminPhoto(albumId: number, photoId: number): Promis
   await ensureOk(response)
 }
 
+export interface OriginalUploadResult {
+  uploaded: number
+  unmatched: number
+  unmatchedFilenames: string[]
+  photos: AdminPhoto[]
+}
+
+export async function uploadAdminOriginals(
+  albumId: number,
+  files: File[],
+): Promise<OriginalUploadResult> {
+  const form = new FormData()
+  for (const file of files) {
+    form.append('files', file)
+  }
+  const response = await fetch(
+    `${API_BASE_URL}/api/admin/albums/${albumId}/originals`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      body: form,
+    },
+  )
+  await ensureOk(response)
+  return response.json() as Promise<OriginalUploadResult>
+}
+
 export function publicPhotoUrl(token: string, photoId: number, variant: 'thumb' | 'web' | 'original'): string {
   return `${API_BASE_URL}/api/public/albums/${encodeURIComponent(token)}/photos/${photoId}/${variant}`
+}
+
+export function publicDownloadUrl(token: string, photoId: number, variant: 'web' | 'original'): string {
+  return `${API_BASE_URL}/api/public/albums/${encodeURIComponent(token)}/photos/${photoId}/download/${variant}`
 }
 
 export function adminPhotoUrl(albumId: number, photoId: number, variant: 'thumb' | 'web' | 'original'): string {

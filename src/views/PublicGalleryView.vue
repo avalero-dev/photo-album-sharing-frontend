@@ -6,6 +6,7 @@ import {
   deselectPublicPhoto,
   finalizeSelection,
   getPublicAlbum,
+  publicDownloadUrl,
   publicPhotoUrl,
   selectPublicPhoto,
   unlockAlbum,
@@ -25,8 +26,10 @@ const unlocking = ref(false)
 const busyPhotoId = ref<number | null>(null)
 const finalizing = ref(false)
 const notice = ref('')
+const lightboxPhoto = ref<PublicPhoto | null>(null)
 
 const canSelect = computed(() => album.value?.status === 'SELECTING')
+const isDelivering = computed(() => album.value?.status === 'DELIVERING')
 const selectedCount = computed(
   () => album.value?.photos.filter((photo) => photo.selected).length ?? 0,
 )
@@ -62,6 +65,7 @@ async function unlock(): Promise<void> {
 
 async function toggle(photo: PublicPhoto): Promise<void> {
   if (!album.value || !canSelect.value) {
+    openLightbox(photo)
     return
   }
   error.value = ''
@@ -98,6 +102,14 @@ async function finalize(): Promise<void> {
   }
 }
 
+function openLightbox(photo: PublicPhoto): void {
+  lightboxPhoto.value = photo
+}
+
+function closeLightbox(): void {
+  lightboxPhoto.value = null
+}
+
 onMounted(load)
 </script>
 
@@ -128,8 +140,8 @@ onMounted(load)
         <p v-else-if="album.status === 'SELECTION_FINALIZED'" class="meta">
           Selección finalizada: {{ selectedCount }} de {{ album.quota }} fotos.
         </p>
-        <p v-else-if="album.status === 'DELIVERING'" class="meta">
-          Tus {{ selectedCount }} fotos seleccionadas.
+        <p v-else-if="isDelivering" class="meta">
+          Tus {{ selectedCount }} fotos seleccionadas ya están disponibles para descargar.
         </p>
 
         <p v-if="notice" class="notice" role="status">{{ notice }}</p>
@@ -141,8 +153,8 @@ onMounted(load)
             <button
               type="button"
               class="tile"
-              :disabled="!canSelect || busyPhotoId === photo.id"
-              :aria-pressed="photo.selected"
+              :disabled="canSelect && busyPhotoId === photo.id"
+              :aria-pressed="canSelect ? photo.selected : undefined"
               @click="toggle(photo)"
             >
               <img
@@ -153,6 +165,12 @@ onMounted(load)
               <span v-if="photo.selected" class="check">✓</span>
             </button>
             <span class="filename">{{ photo.baseFilename }}</span>
+            <div v-if="isDelivering && photo.selected" class="downloads">
+              <a :href="publicDownloadUrl(token, photo.id, 'web')">Descargar web</a>
+              <a v-if="photo.hasOriginal" :href="publicDownloadUrl(token, photo.id, 'original')">
+                Descargar original
+              </a>
+            </div>
           </li>
         </ul>
 
@@ -167,6 +185,14 @@ onMounted(load)
         </button>
       </section>
     </template>
+
+    <div v-if="lightboxPhoto" class="lightbox" @click.self="closeLightbox">
+      <button type="button" class="lightbox-close" @click="closeLightbox">×</button>
+      <img
+        :src="publicPhotoUrl(token, lightboxPhoto.id, 'web')"
+        :alt="lightboxPhoto.baseFilename"
+      />
+    </div>
   </main>
 </template>
 
@@ -279,6 +305,14 @@ button {
   white-space: nowrap;
 }
 
+.downloads {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0 0.5rem 0.5rem;
+  font-size: 0.75rem;
+}
+
 .finalize {
   margin-top: 1.5rem;
 }
@@ -286,5 +320,35 @@ button {
 .error {
   color: #c62828;
   font-size: 0.875rem;
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  z-index: 100;
+}
+
+.lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 2rem;
+  line-height: 1;
+  cursor: pointer;
+  align-self: auto;
 }
 </style>
