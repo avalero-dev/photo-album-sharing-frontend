@@ -31,6 +31,7 @@ export interface AlbumInput {
 export interface PublicPhoto {
   id: number
   baseFilename: string
+  selected: boolean
 }
 
 export interface PublicAlbum {
@@ -159,6 +160,36 @@ export async function unlockAlbum(token: string, password: string): Promise<Publ
   return response.json() as Promise<PublicAlbum>
 }
 
+export async function selectPublicPhoto(token: string, photoId: number): Promise<PublicAlbum> {
+  return mutatePublicSelection(token, photoId, 'select')
+}
+
+export async function deselectPublicPhoto(token: string, photoId: number): Promise<PublicAlbum> {
+  return mutatePublicSelection(token, photoId, 'deselect')
+}
+
+async function mutatePublicSelection(
+  token: string,
+  photoId: number,
+  action: 'select' | 'deselect',
+): Promise<PublicAlbum> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/public/albums/${encodeURIComponent(token)}/photos/${photoId}/${action}`,
+    { method: 'POST', credentials: 'include' },
+  )
+  await ensureOk(response)
+  return response.json() as Promise<PublicAlbum>
+}
+
+export async function finalizeSelection(token: string): Promise<PublicAlbum> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/public/albums/${encodeURIComponent(token)}/finalize`,
+    { method: 'POST', credentials: 'include' },
+  )
+  await ensureOk(response)
+  return response.json() as Promise<PublicAlbum>
+}
+
 export interface AdminPhoto {
   id: number
   albumId: number
@@ -214,4 +245,32 @@ export function publicPhotoUrl(token: string, photoId: number, variant: 'thumb' 
 
 export function adminPhotoUrl(albumId: number, photoId: number, variant: 'thumb' | 'web' | 'original'): string {
   return `${API_BASE_URL}/api/admin/albums/${albumId}/photos/${photoId}/${variant}`
+}
+
+export interface Notification {
+  id: string
+  type: string
+  albumId: number
+  occurredAt: string
+  payload: Record<string, unknown>
+  read: boolean
+}
+
+export interface NotificationInbox {
+  unread: number
+  items: Notification[]
+}
+
+export async function listNotifications(): Promise<NotificationInbox> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/notifications`, { credentials: 'include' })
+  await ensureOk(response)
+  return response.json() as Promise<NotificationInbox>
+}
+
+export async function markNotificationRead(id: string): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/admin/notifications/${encodeURIComponent(id)}/read`,
+    { method: 'POST', credentials: 'include' },
+  )
+  await ensureOk(response)
 }

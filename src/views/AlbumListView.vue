@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
-import { listAlbums, type Album } from '@/services/api'
+import { listAlbums, listNotifications, type Album } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -10,6 +10,7 @@ const router = useRouter()
 const albums = ref<Album[]>([])
 const error = ref('')
 const loading = ref(true)
+const unreadNotifications = ref(0)
 
 async function load(): Promise<void> {
   error.value = ''
@@ -20,6 +21,11 @@ async function load(): Promise<void> {
     error.value = e instanceof Error ? e.message : 'Error inesperado'
   } finally {
     loading.value = false
+  }
+  try {
+    unreadNotifications.value = (await listNotifications()).unread
+  } catch {
+    unreadNotifications.value = 0
   }
 }
 
@@ -36,6 +42,10 @@ onMounted(load)
     <header>
       <h1>Álbumes</h1>
       <div class="session">
+        <RouterLink :to="{ name: 'notifications' }">
+          Notificaciones
+          <span v-if="unreadNotifications > 0" class="badge">{{ unreadNotifications }}</span>
+        </RouterLink>
         <span>{{ auth.user?.email }}</span>
         <button type="button" @click="signOut">Salir</button>
       </div>
@@ -91,6 +101,17 @@ header {
   align-items: center;
   gap: 0.75rem;
   font-size: 0.875rem;
+}
+
+.badge {
+  display: inline-block;
+  min-width: 1.1rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: #c62828;
+  color: #fff;
+  font-size: 0.6875rem;
+  text-align: center;
 }
 
 .actions {
