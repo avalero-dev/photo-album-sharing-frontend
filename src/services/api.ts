@@ -148,6 +148,15 @@ export async function openAlbumDelivery(id: number): Promise<Album> {
   return response.json() as Promise<Album>
 }
 
+export async function publishAlbum(id: number): Promise<Album> {
+  const response = await fetch(`${API_BASE_URL}/api/albums/${id}/publish`, {
+    method: 'POST',
+    credentials: 'include',
+  })
+  await ensureOk(response)
+  return response.json() as Promise<Album>
+}
+
 export async function getPublicAlbum(token: string): Promise<PublicAlbum> {
   const response = await fetch(`${API_BASE_URL}/api/public/albums/${encodeURIComponent(token)}`, {
     credentials: 'include',

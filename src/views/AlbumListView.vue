@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
-import { listAlbums, listNotifications, type Album } from '@/services/api'
+import { listAlbums, listNotifications, publishAlbum, type Album } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -11,6 +11,9 @@ const albums = ref<Album[]>([])
 const error = ref('')
 const loading = ref(true)
 const unreadNotifications = ref(0)
+const busyAlbumId = ref<number | null>(null)
+const actionError = ref('')
+const copiedAlbumId = ref<number | null>(null)
 
 async function load(): Promise<void> {
   error.value = ''
@@ -26,6 +29,38 @@ async function load(): Promise<void> {
     unreadNotifications.value = (await listNotifications()).unread
   } catch {
     unreadNotifications.value = 0
+  }
+}
+
+async function publish(album: Album): Promise<void> {
+  busyAlbumId.value = album.id
+  actionError.value = ''
+  try {
+    await publishAlbum(album.id)
+    await load()
+  } catch (e) {
+    actionError.value = e instanceof Error ? e.message : 'Error inesperado'
+  } finally {
+    busyAlbumId.value = null
+  }
+}
+
+function publicAlbumPath(album: Album): string {
+  return `/a/${album.token}`
+}
+
+async function copyLink(album: Album): Promise<void> {
+  const url = `${window.location.origin}${publicAlbumPath(album)}`
+  try {
+    await navigator.clipboard.writeText(url)
+    copiedAlbumId.value = album.id
+    window.setTimeout(() => {
+      if (copiedAlbumId.value === album.id) {
+        copiedAlbumId.value = null
+      }
+    }, 1500)
+  } catch {
+    window.prompt('Copia el enlace público:', url)
   }
 }
 
@@ -57,29 +92,62 @@ onMounted(load)
 
     <p v-if="loading">Cargando...</p>
     <p v-else-if="error" class="error" role="alert">{{ error }}</p>
-    <p v-else-if="albums.length === 0">Todavía no hay álbumes.</p>
 
-    <table v-else>
-      <thead>
-        <tr>
-          <th>Título</th>
-          <th>Cuota</th>
-          <th>Estado</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="album in albums" :key="album.id">
-          <td>{{ album.title }}</td>
-          <td>{{ album.quota }}</td>
-          <td><span class="status">{{ album.status }}</span></td>
-          <td>
-            <RouterLink :to="{ name: 'album-photos', params: { id: album.id } }">Fotos</RouterLink>
-            <RouterLink :to="{ name: 'album-edit', params: { id: album.id } }">Editar</RouterLink>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <template v-else>
+      <p v-if="actionError" class="error" role="alert">{{ actionError }}</p>
+      <p v-if="albums.length === 0">Todavía no hay álbumes.</p>
+
+      <table v-else>
+        <thead>
+          <tr>
+            <th>Título</th>
+            <th>Cuota</th>
+            <th>Estado</th>
+            <th>Enlace público</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="album in albums" :key="album.id">
+            <td>{{ album.title }}</td>
+            <td>{{ album.quota }}</td>
+            <td><span class="status">{{ album.status }}</span></td>
+            <td>
+              <template v-if="album.status !== 'DRAFT'">
+                <a
+                  class="public-link"
+                  :href="publicAlbumPath(album)"
+                  target="_blank"
+                  rel="noopener"
+                  :title="publicAlbumPath(album)"
+                >
+                  {{ publicAlbumPath(album) }}
+                </a>
+                <button type="button" class="link-button" @click="copyLink(album)">
+                  {{ copiedAlbumId === album.id ? 'Copiado' : 'Copiar' }}
+                </button>
+              </template>
+              <span v-else class="muted">—</span>
+            </td>
+            <td>
+              <div class="row-actions">
+                <RouterLink :to="{ name: 'album-photos', params: { id: album.id } }">Fotos</RouterLink>
+                <RouterLink :to="{ name: 'album-edit', params: { id: album.id } }">Editar</RouterLink>
+                <button
+                  v-if="album.status === 'DRAFT'"
+                  type="button"
+                  class="link-button"
+                  :disabled="busyAlbumId === album.id"
+                  @click="publish(album)"
+                >
+                  {{ busyAlbumId === album.id ? 'Publicando...' : 'Publicar' }}
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </template>
   </main>
 </template>
 
@@ -141,6 +209,41 @@ td {
 .status {
   font-family: monospace;
   font-size: 0.8125rem;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.public-link {
+  display: inline-block;
+  max-width: 16rem;
+  margin-right: 0.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.muted {
+  color: var(--color-text);
+  opacity: 0.5;
+}
+
+.link-button {
+  border: none;
+  background: none;
+  color: var(--color-text);
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.875rem;
+}
+
+.link-button:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .error {
