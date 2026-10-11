@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import PhotoGrid from '@/components/photos/PhotoGrid.vue'
+import PhotoMosaic from '@/components/photos/PhotoMosaic.vue'
 import type { PhotoFrameEntry } from '@/components/photos/PhotoGrid.vue'
 import PhotoLightbox from '@/components/photos/PhotoLightbox.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -22,6 +22,10 @@ const {
   error,
   password,
   unlocking,
+  photos,
+  hasNext,
+  photosLoading,
+  photosError,
   busyPhotoId,
   finalizing,
   notice,
@@ -33,6 +37,7 @@ const {
   selectedCount,
   canFinalize,
   load,
+  loadMore,
   unlock,
   toggle,
   finalize,
@@ -43,17 +48,19 @@ const {
 load()
 
 const entries = computed<PhotoFrameEntry[]>(() =>
-  (album.value?.photos ?? []).map((photo: PublicPhoto, index: number) => ({
+  photos.value.map((photo: PublicPhoto, index: number) => ({
     id: photo.id,
     number: index + 1,
     baseFilename: photo.baseFilename,
     selected: photo.selected,
     hasOriginal: photo.hasOriginal,
+    width: photo.width,
+    height: photo.height,
   })),
 )
 
 function publicPhotoFor(entry: PhotoFrameEntry): PublicPhoto | undefined {
-  return album.value?.photos.find((photo) => photo.id === entry.id)
+  return photos.value.find((photo) => photo.id === entry.id)
 }
 
 function srcFor(photo: PhotoFrameEntry): string {
@@ -73,6 +80,14 @@ function onOpen(entry: PhotoFrameEntry): void {
     openLightbox(photo)
   }
 }
+
+async function retryLoadMore(): Promise<void> {
+  await loadMore()
+}
+
+const initialPhotosLoading = computed(
+  () => album.value !== null && !isLocked.value && photos.value.length === 0 && photosLoading.value,
+)
 
 const statusSentence = computed(() => {
   if (!album.value) {
@@ -101,11 +116,36 @@ async function onFinish(): Promise<void> {
   }
   await finalize()
 }
+
+// Carga incremental: el centinela al final del mosaico dispara el siguiente
+// lote al entrar en el viewport. Sin controles de paginación.
+const sentinel = ref<HTMLElement | null>(null)
+let observer: IntersectionObserver | null = null
+
+watch(sentinel, (element) => {
+  observer?.disconnect()
+  observer = null
+  if (element && typeof IntersectionObserver !== 'undefined') {
+    observer = new IntersectionObserver(
+      (observed) => {
+        if (observed.some((entry) => entry.isIntersecting)) {
+          void loadMore()
+        }
+      },
+      { rootMargin: '600px 0px' },
+    )
+    observer.observe(element)
+  }
+})
+
+onBeforeUnmount(() => observer?.disconnect())
 </script>
 
 <template>
   <main class="gallery">
-    <p v-if="loading" class="state-line" role="status">Cargando galería…</p>
+    <p v-if="loading || initialPhotosLoading" class="state-line" role="status">
+      Cargando galería…
+    </p>
 
     <EmptyState
       v-else-if="notFound"
@@ -148,32 +188,46 @@ async function onFinish(): Promise<void> {
         <ErrorNotice v-if="notice" tone="success">{{ notice }}</ErrorNotice>
         <ErrorNotice v-if="error">{{ error }}</ErrorNotice>
 
+        <template v-if="photos.length === 0 && !photosLoading && photosError">
+          <ErrorNotice>{{ photosError }}</ErrorNotice>
+          <AppButton variant="secondary" @click="retryLoadMore">Reintentar</AppButton>
+        </template>
+
         <EmptyState
-          v-if="album.photos.length === 0"
+          v-else-if="photos.length === 0 && !photosLoading"
           title="Este álbum todavía no tiene fotos"
           description="El fotógrafo aún no ha subido fotos para este álbum."
         />
 
-        <PhotoGrid
-          v-else
-          :photos="entries"
-          :src-for="srcFor"
-          :selectable="canSelect"
-          :openable="!canSelect"
-          :busy-id="busyPhotoId"
-          :animate-entry="true"
-          @toggle="onToggle"
-          @open="onOpen"
-        >
-          <template #footer="{ photo }">
-            <span v-if="isDelivering && photo.selected" class="downloads">
-              <a :href="publicDownloadUrl(token, photo.id, 'web')">Descargar web</a>
-              <a v-if="photo.hasOriginal" :href="publicDownloadUrl(token, photo.id, 'original')">
-                Descargar original
-              </a>
-            </span>
-          </template>
-        </PhotoGrid>
+        <template v-else>
+          <PhotoMosaic
+            :photos="entries"
+            :src-for="srcFor"
+            :selectable="canSelect"
+            :openable="!canSelect"
+            :busy-id="busyPhotoId"
+            @toggle="onToggle"
+            @open="onOpen"
+          >
+            <template #footer="{ photo }">
+              <span v-if="isDelivering && photo.selected" class="downloads">
+                <a :href="publicDownloadUrl(token, photo.id, 'web')">Descargar web</a>
+                <a v-if="photo.hasOriginal" :href="publicDownloadUrl(token, photo.id, 'original')">
+                  Descargar original
+                </a>
+              </span>
+            </template>
+          </PhotoMosaic>
+
+          <div ref="sentinel" class="sentinel">
+            <p v-if="photosLoading" class="state-line" role="status">Cargando más fotos…</p>
+            <template v-else-if="photosError">
+              <ErrorNotice>{{ photosError }}</ErrorNotice>
+              <AppButton variant="secondary" @click="retryLoadMore">Reintentar</AppButton>
+            </template>
+            <p v-else-if="!hasNext" class="state-line" role="status">No hay más fotos.</p>
+          </div>
+        </template>
 
         <p v-if="canSelect && selectedCount === 0" class="hint">
           Marca en la hoja de contactos las fotos que quieres y finaliza tu selección.
@@ -204,7 +258,7 @@ async function onFinish(): Promise<void> {
 
 <style scoped>
 .gallery {
-  max-width: 44rem;
+  max-width: 60rem;
   margin: 0 auto;
   padding: var(--space-7) var(--space-5);
 }
@@ -258,13 +312,24 @@ async function onFinish(): Promise<void> {
   gap: var(--space-5);
 }
 
+.sentinel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+}
+
 .downloads {
   display: flex;
-  flex: 1;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--space-1) var(--space-3);
   font-size: var(--text-xs);
+}
+
+.downloads a {
+  color: #fff;
 }
 
 .finish {

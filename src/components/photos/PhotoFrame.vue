@@ -12,12 +12,16 @@ const props = withDefaults(
     selectable?: boolean
     openable?: boolean
     busy?: boolean
+    aspect?: number | null
+    overlay?: boolean
   }>(),
   {
     selected: false,
     selectable: false,
     openable: false,
     busy: false,
+    aspect: null,
+    overlay: false,
   },
 )
 
@@ -27,10 +31,14 @@ defineEmits<{
 }>()
 
 const frameNumber = computed(() => String(props.number).padStart(2, '0'))
+
+const imageStyle = computed(() =>
+  !props.overlay && props.aspect ? { aspectRatio: String(props.aspect) } : undefined,
+)
 </script>
 
 <template>
-  <li class="frame" :class="{ selected }">
+  <li class="frame" :class="{ selected, 'frame--overlay': overlay }">
     <button
       v-if="selectable"
       type="button"
@@ -40,7 +48,7 @@ const frameNumber = computed(() => String(props.number).padStart(2, '0'))
       :disabled="busy"
       @click="$emit('toggle')"
     >
-      <img :src="src" :alt="`Foto ${number} — ${filename}`" loading="lazy" />
+      <img :src="src" :alt="`Foto ${number} — ${filename}`" :style="imageStyle" loading="lazy" />
       <span class="frame-no counter" aria-hidden="true">{{ frameNumber }}</span>
       <span v-if="selected" class="frame-check" aria-hidden="true">✓</span>
     </button>
@@ -52,12 +60,12 @@ const frameNumber = computed(() => String(props.number).padStart(2, '0'))
       :aria-label="`Ampliar la foto ${number}: ${filename}`"
       @click="$emit('open')"
     >
-      <img :src="src" :alt="`Foto ${number} — ${filename}`" loading="lazy" />
+      <img :src="src" :alt="`Foto ${number} — ${filename}`" :style="imageStyle" loading="lazy" />
       <span class="frame-no counter" aria-hidden="true">{{ frameNumber }}</span>
     </button>
 
     <div v-else class="frame-hit static">
-      <img :src="src" :alt="`Foto ${number} — ${filename}`" loading="lazy" />
+      <img :src="src" :alt="`Foto ${number} — ${filename}`" :style="imageStyle" loading="lazy" />
       <span class="frame-no counter" aria-hidden="true">{{ frameNumber }}</span>
       <span v-if="selected" class="frame-check" aria-hidden="true">✓</span>
     </div>
@@ -151,5 +159,35 @@ const frameNumber = computed(() => String(props.number).padStart(2, '0'))
   display: flex;
   justify-content: flex-end;
   padding: var(--space-1) var(--space-2) var(--space-2);
+}
+
+/* Modo mosaico: la celda es la caja calculada por el padre; la imagen la
+   rellena y el pie/numeración se superponen sin alterar la altura. */
+.frame--overlay {
+  height: 100%;
+  overflow: hidden;
+}
+
+.frame--overlay .frame-hit,
+.frame--overlay .frame-hit.static {
+  height: 100%;
+}
+
+.frame--overlay img {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  object-fit: cover;
+}
+
+.frame--overlay .filename {
+  display: none;
+}
+
+.frame--overlay .footer {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: var(--space-2);
+  background: linear-gradient(to top, rgb(12 14 13 / 62%), transparent);
 }
 </style>

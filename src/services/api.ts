@@ -33,15 +33,32 @@ export interface PublicPhoto {
   baseFilename: string
   selected: boolean
   hasOriginal: boolean
+  width: number | null
+  height: number | null
 }
 
-export interface PublicAlbum {
+export interface PublicAlbumSummary {
   title: string
   quota: number
   status: string
   requiresPassword: boolean
   unlocked: boolean
-  photos: PublicPhoto[]
+  selectedCount: number
+}
+
+export interface PublicPhotoPage {
+  content: PublicPhoto[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+  hasNext: boolean
+}
+
+export interface PublicSelectionResult {
+  status: string
+  selectedCount: number
+  photo: PublicPhoto
 }
 
 export class ApiError extends Error {
@@ -157,15 +174,29 @@ export async function publishAlbum(id: number): Promise<Album> {
   return response.json() as Promise<Album>
 }
 
-export async function getPublicAlbum(token: string): Promise<PublicAlbum> {
+export async function getPublicAlbum(token: string): Promise<PublicAlbumSummary> {
   const response = await fetch(`${API_BASE_URL}/api/public/albums/${encodeURIComponent(token)}`, {
     credentials: 'include',
   })
   await ensureOk(response)
-  return response.json() as Promise<PublicAlbum>
+  return response.json() as Promise<PublicAlbumSummary>
 }
 
-export async function unlockAlbum(token: string, password: string): Promise<PublicAlbum> {
+export async function getPublicAlbumPhotos(
+  token: string,
+  page: number,
+  size: number,
+): Promise<PublicPhotoPage> {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  const response = await fetch(
+    `${API_BASE_URL}/api/public/albums/${encodeURIComponent(token)}/photos?${params}`,
+    { credentials: 'include' },
+  )
+  await ensureOk(response)
+  return response.json() as Promise<PublicPhotoPage>
+}
+
+export async function unlockAlbum(token: string, password: string): Promise<PublicAlbumSummary> {
   const response = await fetch(
     `${API_BASE_URL}/api/public/albums/${encodeURIComponent(token)}/unlock`,
     {
@@ -176,14 +207,20 @@ export async function unlockAlbum(token: string, password: string): Promise<Publ
     },
   )
   await ensureOk(response)
-  return response.json() as Promise<PublicAlbum>
+  return response.json() as Promise<PublicAlbumSummary>
 }
 
-export async function selectPublicPhoto(token: string, photoId: number): Promise<PublicAlbum> {
+export async function selectPublicPhoto(
+  token: string,
+  photoId: number,
+): Promise<PublicSelectionResult> {
   return mutatePublicSelection(token, photoId, 'select')
 }
 
-export async function deselectPublicPhoto(token: string, photoId: number): Promise<PublicAlbum> {
+export async function deselectPublicPhoto(
+  token: string,
+  photoId: number,
+): Promise<PublicSelectionResult> {
   return mutatePublicSelection(token, photoId, 'deselect')
 }
 
@@ -191,22 +228,22 @@ async function mutatePublicSelection(
   token: string,
   photoId: number,
   action: 'select' | 'deselect',
-): Promise<PublicAlbum> {
+): Promise<PublicSelectionResult> {
   const response = await fetch(
     `${API_BASE_URL}/api/public/albums/${encodeURIComponent(token)}/photos/${photoId}/${action}`,
     { method: 'POST', credentials: 'include' },
   )
   await ensureOk(response)
-  return response.json() as Promise<PublicAlbum>
+  return response.json() as Promise<PublicSelectionResult>
 }
 
-export async function finalizeSelection(token: string): Promise<PublicAlbum> {
+export async function finalizeSelection(token: string): Promise<PublicAlbumSummary> {
   const response = await fetch(
     `${API_BASE_URL}/api/public/albums/${encodeURIComponent(token)}/finalize`,
     { method: 'POST', credentials: 'include' },
   )
   await ensureOk(response)
-  return response.json() as Promise<PublicAlbum>
+  return response.json() as Promise<PublicAlbumSummary>
 }
 
 export interface AdminPhoto {

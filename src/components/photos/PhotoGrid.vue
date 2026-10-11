@@ -9,6 +9,8 @@ export interface PhotoFrameEntry {
   baseFilename: string
   selected: boolean
   hasOriginal: boolean
+  width?: number | null
+  height?: number | null
 }
 
 withDefaults(
