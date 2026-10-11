@@ -17,33 +17,31 @@ const router = createRouter({
     },
     {
       path: '/admin',
-      name: 'albums',
-      component: () => import('@/views/AlbumListView.vue'),
+      component: () => import('@/components/layout/AdminLayout.vue'),
       meta: { requiresAuth: true },
-    },
-    {
-      path: '/admin/albums/new',
-      name: 'album-new',
-      component: () => import('@/views/AlbumFormView.vue'),
-      meta: { requiresAuth: true },
-    },
-    {
-      path: '/admin/albums/:id/edit',
-      name: 'album-edit',
-      component: () => import('@/views/AlbumFormView.vue'),
-      meta: { requiresAuth: true },
-    },
-    {
-      path: '/admin/albums/:id/photos',
-      name: 'album-photos',
-      component: () => import('@/views/AdminAlbumPhotosView.vue'),
-      meta: { requiresAuth: true },
-    },
-    {
-      path: '/admin/notifications',
-      name: 'notifications',
-      component: () => import('@/views/NotificationsView.vue'),
-      meta: { requiresAuth: true },
+      children: [
+        { path: '', name: 'albums', component: () => import('@/views/AlbumListView.vue') },
+        {
+          path: 'albums/new',
+          name: 'album-new',
+          component: () => import('@/views/AlbumFormView.vue'),
+        },
+        {
+          path: 'albums/:id/edit',
+          name: 'album-edit',
+          component: () => import('@/views/AlbumFormView.vue'),
+        },
+        {
+          path: 'albums/:id/photos',
+          name: 'album-photos',
+          component: () => import('@/views/AdminAlbumPhotosView.vue'),
+        },
+        {
+          path: 'notifications',
+          name: 'notifications',
+          component: () => import('@/views/NotificationsView.vue'),
+        },
+      ],
     },
   ],
 })

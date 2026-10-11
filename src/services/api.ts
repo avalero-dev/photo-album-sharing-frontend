@@ -222,10 +222,9 @@ export interface AdminPhoto {
 }
 
 export async function listAdminPhotos(albumId: number): Promise<AdminPhoto[]> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/admin/albums/${albumId}/photos`,
-    { credentials: 'include' },
-  )
+  const response = await fetch(`${API_BASE_URL}/api/admin/albums/${albumId}/photos`, {
+    credentials: 'include',
+  })
   await ensureOk(response)
   return response.json() as Promise<AdminPhoto[]>
 }
@@ -238,23 +237,20 @@ export async function uploadAdminPhotos(
   for (const file of files) {
     form.append('files', file)
   }
-  const response = await fetch(
-    `${API_BASE_URL}/api/admin/albums/${albumId}/photos`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      body: form,
-    },
-  )
+  const response = await fetch(`${API_BASE_URL}/api/admin/albums/${albumId}/photos`, {
+    method: 'POST',
+    credentials: 'include',
+    body: form,
+  })
   await ensureOk(response)
   return response.json() as Promise<{ uploaded: number; photos: AdminPhoto[] }>
 }
 
 export async function deleteAdminPhoto(albumId: number, photoId: number): Promise<void> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/admin/albums/${albumId}/photos/${photoId}`,
-    { method: 'DELETE', credentials: 'include' },
-  )
+  const response = await fetch(`${API_BASE_URL}/api/admin/albums/${albumId}/photos/${photoId}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  })
   await ensureOk(response)
 }
 
@@ -273,27 +269,36 @@ export async function uploadAdminOriginals(
   for (const file of files) {
     form.append('files', file)
   }
-  const response = await fetch(
-    `${API_BASE_URL}/api/admin/albums/${albumId}/originals`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      body: form,
-    },
-  )
+  const response = await fetch(`${API_BASE_URL}/api/admin/albums/${albumId}/originals`, {
+    method: 'POST',
+    credentials: 'include',
+    body: form,
+  })
   await ensureOk(response)
   return response.json() as Promise<OriginalUploadResult>
 }
 
-export function publicPhotoUrl(token: string, photoId: number, variant: 'thumb' | 'web' | 'original'): string {
+export function publicPhotoUrl(
+  token: string,
+  photoId: number,
+  variant: 'thumb' | 'web' | 'original',
+): string {
   return `${API_BASE_URL}/api/public/albums/${encodeURIComponent(token)}/photos/${photoId}/${variant}`
 }
 
-export function publicDownloadUrl(token: string, photoId: number, variant: 'web' | 'original'): string {
+export function publicDownloadUrl(
+  token: string,
+  photoId: number,
+  variant: 'web' | 'original',
+): string {
   return `${API_BASE_URL}/api/public/albums/${encodeURIComponent(token)}/photos/${photoId}/download/${variant}`
 }
 
-export function adminPhotoUrl(albumId: number, photoId: number, variant: 'thumb' | 'web' | 'original'): string {
+export function adminPhotoUrl(
+  albumId: number,
+  photoId: number,
+  variant: 'thumb' | 'web' | 'original',
+): string {
   return `${API_BASE_URL}/api/admin/albums/${albumId}/photos/${photoId}/${variant}`
 }
 
@@ -312,7 +317,9 @@ export interface NotificationInbox {
 }
 
 export async function listNotifications(): Promise<NotificationInbox> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/notifications`, { credentials: 'include' })
+  const response = await fetch(`${API_BASE_URL}/api/admin/notifications`, {
+    credentials: 'include',
+  })
   await ensureOk(response)
   return response.json() as Promise<NotificationInbox>
 }

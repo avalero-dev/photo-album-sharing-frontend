@@ -1,354 +1,294 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import {
-  ApiError,
-  deselectPublicPhoto,
-  finalizeSelection,
-  getPublicAlbum,
-  publicDownloadUrl,
-  publicPhotoUrl,
-  selectPublicPhoto,
-  unlockAlbum,
-  type PublicAlbum,
-  type PublicPhoto,
-} from '@/services/api'
+import PhotoGrid from '@/components/photos/PhotoGrid.vue'
+import type { PhotoFrameEntry } from '@/components/photos/PhotoGrid.vue'
+import PhotoLightbox from '@/components/photos/PhotoLightbox.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
+import ErrorNotice from '@/components/ui/ErrorNotice.vue'
+import ProgressCounter from '@/components/ui/ProgressCounter.vue'
+import TextField from '@/components/ui/TextField.vue'
+import { usePublicAlbum } from '@/composables/usePublicAlbum'
+import { publicDownloadUrl, publicPhotoUrl, type PublicPhoto } from '@/services/api'
 
 const route = useRoute()
 const token = String(route.params.token)
 
-const album = ref<PublicAlbum | null>(null)
-const loading = ref(true)
-const notFound = ref(false)
-const error = ref('')
-const password = ref('')
-const unlocking = ref(false)
-const busyPhotoId = ref<number | null>(null)
-const finalizing = ref(false)
-const notice = ref('')
-const lightboxPhoto = ref<PublicPhoto | null>(null)
+const {
+  album,
+  loading,
+  notFound,
+  error,
+  password,
+  unlocking,
+  busyPhotoId,
+  finalizing,
+  notice,
+  lightboxPhoto,
+  canSelect,
+  isFinalized,
+  isDelivering,
+  isLocked,
+  selectedCount,
+  canFinalize,
+  load,
+  unlock,
+  toggle,
+  finalize,
+  openLightbox,
+  closeLightbox,
+} = usePublicAlbum(token)
 
-const canSelect = computed(() => album.value?.status === 'SELECTING')
-const isDelivering = computed(() => album.value?.status === 'DELIVERING')
-const selectedCount = computed(
-  () => album.value?.photos.filter((photo) => photo.selected).length ?? 0,
+load()
+
+const entries = computed<PhotoFrameEntry[]>(() =>
+  (album.value?.photos ?? []).map((photo: PublicPhoto, index: number) => ({
+    id: photo.id,
+    number: index + 1,
+    baseFilename: photo.baseFilename,
+    selected: photo.selected,
+    hasOriginal: photo.hasOriginal,
+  })),
 )
 
-async function load(): Promise<void> {
-  loading.value = true
-  error.value = ''
-  notFound.value = false
-  try {
-    album.value = await getPublicAlbum(token)
-  } catch (e) {
-    if (e instanceof ApiError && e.status === 404) {
-      notFound.value = true
-    } else {
-      error.value = e instanceof Error ? e.message : 'Error inesperado'
-    }
-  } finally {
-    loading.value = false
+function publicPhotoFor(entry: PhotoFrameEntry): PublicPhoto | undefined {
+  return album.value?.photos.find((photo) => photo.id === entry.id)
+}
+
+function srcFor(photo: PhotoFrameEntry): string {
+  return publicPhotoUrl(token, photo.id, 'thumb')
+}
+
+async function onToggle(entry: PhotoFrameEntry): Promise<void> {
+  const photo = publicPhotoFor(entry)
+  if (photo) {
+    await toggle(photo)
   }
 }
 
-async function unlock(): Promise<void> {
-  error.value = ''
-  unlocking.value = true
-  try {
-    album.value = await unlockAlbum(token, password.value)
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Error inesperado'
-  } finally {
-    unlocking.value = false
-  }
-}
-
-async function toggle(photo: PublicPhoto): Promise<void> {
-  if (!album.value || !canSelect.value) {
+function onOpen(entry: PhotoFrameEntry): void {
+  const photo = publicPhotoFor(entry)
+  if (photo) {
     openLightbox(photo)
-    return
-  }
-  error.value = ''
-  notice.value = ''
-  busyPhotoId.value = photo.id
-  try {
-    album.value = photo.selected
-      ? await deselectPublicPhoto(token, photo.id)
-      : await selectPublicPhoto(token, photo.id)
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Error inesperado'
-  } finally {
-    busyPhotoId.value = null
   }
 }
 
-async function finalize(): Promise<void> {
-  if (!album.value || !canSelect.value) {
-    return
+const statusSentence = computed(() => {
+  if (!album.value) {
+    return ''
   }
+  if (canSelect.value) {
+    return `Has elegido ${selectedCount.value} de ${album.value.quota} fotos.`
+  }
+  if (isFinalized.value) {
+    return `Selección finalizada: ${selectedCount.value} de ${album.value.quota} fotos.`
+  }
+  if (isDelivering.value) {
+    return `Tus ${selectedCount.value} fotos seleccionadas ya están disponibles para descargar.`
+  }
+  return ''
+})
+
+const lightboxSrc = computed(() =>
+  lightboxPhoto.value ? publicPhotoUrl(token, lightboxPhoto.value.id, 'web') : '',
+)
+const lightboxAlt = computed(() => lightboxPhoto.value?.baseFilename ?? '')
+
+async function onFinish(): Promise<void> {
   if (!confirm('¿Finalizar la selección? Después no podrás cambiarla.')) {
     return
   }
-  error.value = ''
-  notice.value = ''
-  finalizing.value = true
-  try {
-    album.value = await finalizeSelection(token)
-    notice.value = 'Tu selección quedó registrada. El fotógrafo la preparará.'
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Error inesperado'
-  } finally {
-    finalizing.value = false
-  }
+  await finalize()
 }
-
-function openLightbox(photo: PublicPhoto): void {
-  lightboxPhoto.value = photo
-}
-
-function closeLightbox(): void {
-  lightboxPhoto.value = null
-}
-
-onMounted(load)
 </script>
 
 <template>
-  <main class="public">
-    <p v-if="loading">Cargando...</p>
-    <p v-else-if="notFound">Álbum no encontrado.</p>
-    <p v-else-if="error && !album" class="error" role="alert">{{ error }}</p>
+  <main class="gallery">
+    <p v-if="loading" class="state-line" role="status">Cargando galería…</p>
+
+    <EmptyState
+      v-else-if="notFound"
+      title="Álbum no encontrado"
+      description="El enlace no existe o el álbum ya no está disponible. Pide al fotógrafo un enlace nuevo."
+    />
+
+    <ErrorNotice v-else-if="error && !album">{{ error }}</ErrorNotice>
 
     <template v-else-if="album">
-      <h1>{{ album.title }}</h1>
+      <header class="header">
+        <h1 class="title-serif title">{{ album.title }}</h1>
+        <div class="counter-line">
+          <ProgressCounter
+            v-if="!isLocked"
+            :current="selectedCount"
+            :total="album.quota"
+            label="fotos"
+          />
+          <p v-if="statusSentence" class="sentence">{{ statusSentence }}</p>
+        </div>
+      </header>
 
-      <form v-if="album.requiresPassword && !album.unlocked" @submit.prevent="unlock">
-        <label>
-          Este álbum está protegido. Introduce la contraseña:
-          <input v-model="password" type="password" required />
-        </label>
-        <p v-if="error" class="error" role="alert">{{ error }}</p>
-        <button type="submit" :disabled="unlocking">
-          {{ unlocking ? 'Comprobando...' : 'Entrar' }}
-        </button>
+      <form v-if="isLocked" class="gate" @submit.prevent="unlock">
+        <p class="gate-note">Este álbum está protegido por una contraseña.</p>
+        <TextField
+          v-model="password"
+          label="Contraseña"
+          type="password"
+          required
+          autocomplete="current-password"
+        />
+        <ErrorNotice v-if="error">{{ error }}</ErrorNotice>
+        <AppButton type="submit" variant="primary" :busy="unlocking">
+          {{ unlocking ? 'Comprobando…' : 'Entrar' }}
+        </AppButton>
       </form>
 
-      <section v-else class="gallery">
-        <p v-if="canSelect" class="meta">
-          Has elegido <strong>{{ selectedCount }}</strong> de {{ album.quota }} fotos.
-        </p>
-        <p v-else-if="album.status === 'SELECTION_FINALIZED'" class="meta">
-          Selección finalizada: {{ selectedCount }} de {{ album.quota }} fotos.
-        </p>
-        <p v-else-if="isDelivering" class="meta">
-          Tus {{ selectedCount }} fotos seleccionadas ya están disponibles para descargar.
-        </p>
+      <section v-else class="sheet">
+        <ErrorNotice v-if="notice" tone="success">{{ notice }}</ErrorNotice>
+        <ErrorNotice v-if="error">{{ error }}</ErrorNotice>
 
-        <p v-if="notice" class="notice" role="status">{{ notice }}</p>
-        <p v-if="error" class="error" role="alert">{{ error }}</p>
-        <p v-if="album.photos.length === 0">Este álbum todavía no tiene fotos.</p>
+        <EmptyState
+          v-if="album.photos.length === 0"
+          title="Este álbum todavía no tiene fotos"
+          description="El fotógrafo aún no ha subido fotos para este álbum."
+        />
 
-        <ul v-else class="grid">
-          <li v-for="photo in album.photos" :key="photo.id" :class="{ selected: photo.selected }">
-            <button
-              type="button"
-              class="tile"
-              :disabled="canSelect && busyPhotoId === photo.id"
-              :aria-pressed="canSelect ? photo.selected : undefined"
-              @click="toggle(photo)"
-            >
-              <img
-                :src="publicPhotoUrl(token, photo.id, 'thumb')"
-                :alt="photo.baseFilename"
-                loading="lazy"
-              />
-              <span v-if="photo.selected" class="check">✓</span>
-            </button>
-            <span class="filename">{{ photo.baseFilename }}</span>
-            <div v-if="isDelivering && photo.selected" class="downloads">
+        <PhotoGrid
+          v-else
+          :photos="entries"
+          :src-for="srcFor"
+          :selectable="canSelect"
+          :openable="!canSelect"
+          :busy-id="busyPhotoId"
+          :animate-entry="true"
+          @toggle="onToggle"
+          @open="onOpen"
+        >
+          <template #footer="{ photo }">
+            <span v-if="isDelivering && photo.selected" class="downloads">
               <a :href="publicDownloadUrl(token, photo.id, 'web')">Descargar web</a>
               <a v-if="photo.hasOriginal" :href="publicDownloadUrl(token, photo.id, 'original')">
                 Descargar original
               </a>
-            </div>
-          </li>
-        </ul>
+            </span>
+          </template>
+        </PhotoGrid>
 
-        <button
+        <p v-if="canSelect && selectedCount === 0" class="hint">
+          Marca en la hoja de contactos las fotos que quieres y finaliza tu selección.
+        </p>
+
+        <AppButton
           v-if="canSelect"
-          type="button"
-          class="finalize"
-          :disabled="selectedCount === 0 || finalizing"
-          @click="finalize"
+          class="finish"
+          variant="primary"
+          :disabled="!canFinalize"
+          :busy="finalizing"
+          @click="onFinish"
         >
-          {{ finalizing ? 'Enviando...' : 'Finalizar selección' }}
-        </button>
+          {{ finalizing ? 'Enviando…' : 'Finalizar selección' }}
+        </AppButton>
       </section>
     </template>
 
-    <div v-if="lightboxPhoto" class="lightbox" @click.self="closeLightbox">
-      <button type="button" class="lightbox-close" @click="closeLightbox">×</button>
-      <img
-        :src="publicPhotoUrl(token, lightboxPhoto.id, 'web')"
-        :alt="lightboxPhoto.baseFilename"
-      />
-    </div>
+    <PhotoLightbox
+      v-if="lightboxPhoto"
+      :src="lightboxSrc"
+      :alt="lightboxAlt"
+      :filename="lightboxPhoto.baseFilename"
+      @close="closeLightbox"
+    />
   </main>
 </template>
 
 <style scoped>
-.public {
-  max-width: 64rem;
-  margin: 2rem auto;
-  padding: 0 1rem;
+.gallery {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: var(--space-7) var(--space-5);
 }
 
-form {
+.header {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  max-width: 24rem;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-5);
+  border-bottom: var(--hairline) solid var(--color-line);
 }
 
-label {
+.title {
+  font-size: var(--text-display);
+  line-height: var(--lh-tight);
+}
+
+.counter-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.sentence {
+  font-size: var(--text-sm);
+  color: var(--color-ink-soft);
+}
+
+.state-line {
+  font-size: var(--text-sm);
+  color: var(--color-ink-soft);
+}
+
+.gate {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.875rem;
+  gap: var(--space-4);
+  max-width: 22rem;
 }
 
-input {
-  padding: 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
+.gate-note {
+  font-size: var(--text-sm);
+  color: var(--color-ink-soft);
 }
 
-button {
-  padding: 0.5rem 1rem;
-  cursor: pointer;
-  align-self: flex-start;
-}
-
-.meta {
-  font-size: 0.875rem;
-  color: var(--color-text);
-}
-
-.notice {
-  color: #2e7d32;
-  font-size: 0.875rem;
-}
-
-.grid {
-  list-style: none;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
-  gap: 0.5rem;
-}
-
-.grid li {
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--color-background-soft);
+.sheet {
   display: flex;
   flex-direction: column;
-}
-
-.grid li.selected {
-  border-color: #2e7d32;
-  box-shadow: 0 0 0 2px rgba(46, 125, 50, 0.3);
-}
-
-.tile {
-  position: relative;
-  padding: 0;
-  border: none;
-  background: none;
-  cursor: pointer;
-  width: 100%;
-}
-
-.tile:disabled {
-  cursor: default;
-}
-
-.grid img {
-  display: block;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  object-fit: cover;
-  background: #f3f3f3;
-}
-
-.check {
-  position: absolute;
-  top: 0.25rem;
-  right: 0.25rem;
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 50%;
-  background: #2e7d32;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.875rem;
-}
-
-.filename {
-  padding: 0.5rem;
-  font-size: 0.8125rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  gap: var(--space-5);
 }
 
 .downloads {
   display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  padding: 0 0.5rem 0.5rem;
-  font-size: 0.75rem;
+  flex: 1;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
 }
 
-.finalize {
-  margin-top: 1.5rem;
+.finish {
+  align-self: flex-start;
+  padding: 0.65rem 1.25rem;
+  font-size: var(--text-base);
 }
 
-.error {
-  color: #c62828;
-  font-size: 0.875rem;
+.hint {
+  font-size: var(--text-sm);
+  color: var(--color-ink-soft);
 }
 
-.lightbox {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem;
-  z-index: 100;
-}
+@media (max-width: 560px) {
+  .gallery {
+    padding: var(--space-5) var(--space-4);
+  }
 
-.lightbox img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
+  .title {
+    font-size: var(--text-xl);
+  }
 
-.lightbox-close {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  background: none;
-  border: none;
-  color: #fff;
-  font-size: 2rem;
-  line-height: 1;
-  cursor: pointer;
-  align-self: auto;
+  .finish {
+    align-self: stretch;
+  }
 }
 </style>

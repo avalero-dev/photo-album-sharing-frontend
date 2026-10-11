@@ -1,21 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
-import {
-  listNotifications,
-  markNotificationRead,
-  type Notification,
-} from '@/services/api'
+import { onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
+import AppButton from '@/components/ui/AppButton.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
+import ErrorNotice from '@/components/ui/ErrorNotice.vue'
+import { useNotifications } from '@/composables/useNotifications'
 
-const router = useRouter()
-
-const items = ref<Notification[]>([])
-const unreadCount = ref(0)
-const loading = ref(true)
-const error = ref('')
-const busyId = ref<string | null>(null)
-
-const unread = computed(() => items.value.filter((item) => !item.read).length)
+const { items, unread, loading, error, busyId, load, markRead } = useNotifications()
 
 const typeLabels: Record<string, string> = {
   ALBUM_PUBLISHED: 'Álbum publicado',
@@ -32,161 +23,152 @@ function formatDate(value: string): string {
   return new Date(value).toLocaleString('es-CL')
 }
 
-async function load(): Promise<void> {
-  error.value = ''
-  loading.value = true
-  try {
-    const inbox = await listNotifications()
-    items.value = inbox.items
-    unreadCount.value = inbox.unread
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Error inesperado'
-  } finally {
-    loading.value = false
-  }
-}
-
-async function markRead(item: Notification): Promise<void> {
-  if (item.read) {
-    return
-  }
-  busyId.value = item.id
-  error.value = ''
-  try {
-    await markNotificationRead(item.id)
-    item.read = true
-    unreadCount.value = Math.max(0, unreadCount.value - 1)
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Error inesperado'
-  } finally {
-    busyId.value = null
-  }
-}
-
 onMounted(load)
 </script>
 
 <template>
-  <main class="notifications">
-    <header>
-      <button type="button" class="link-button" @click="router.push({ name: 'albums' })">
-        ← Álbumes
-      </button>
-      <h1>Notificaciones</h1>
-      <p v-if="unread > 0" class="badge">{{ unread }} sin leer</p>
+  <section class="notifications">
+    <header class="page-header">
+      <h1 class="title-serif page-title">Notificaciones</h1>
+      <p class="unread-note">
+        <span v-if="unread > 0" class="counter">{{ unread }} sin leer</span>
+        <span v-else class="calm">Nada sin leer</span>
+      </p>
     </header>
 
-    <p v-if="loading">Cargando...</p>
-    <p v-else-if="error" class="error" role="alert">{{ error }}</p>
-    <p v-else-if="items.length === 0">No hay notificaciones.</p>
+    <ErrorNotice v-if="error">{{ error }}</ErrorNotice>
+
+    <p v-if="loading" class="state-line" role="status">Cargando notificaciones…</p>
+
+    <EmptyState
+      v-else-if="items.length === 0"
+      title="No hay notificaciones"
+      description="Cuando algo ocurra con tus álbumes —publicación, selección del cliente, entrega— aparecerá aquí."
+    />
 
     <ul v-else class="list">
-      <li v-for="item in items" :key="item.id" :class="{ unread: !item.read }">
+      <li v-for="item in items" :key="item.id" class="row" :class="{ 'row-unread': !item.read }">
         <div class="body">
           <span class="type">{{ label(item.type) }}</span>
-          <span class="meta">Álbum #{{ item.albumId }} · {{ formatDate(item.occurredAt) }}</span>
-          <RouterLink
-            v-if="item.type === 'SELECTION_FINALIZED'"
-            :to="{ name: 'album-photos', params: { id: item.albumId } }"
+          <span class="meta"
+            >Álbum #<span class="counter">{{ item.albumId }}</span> ·
+            {{ formatDate(item.occurredAt) }}</span
           >
-            Ver álbum
-          </RouterLink>
         </div>
-        <button
+
+        <RouterLink
+          v-if="item.type === 'SELECTION_FINALIZED'"
+          class="see-album"
+          :to="{ name: 'album-photos', params: { id: item.albumId } }"
+        >
+          Ver álbum
+        </RouterLink>
+
+        <AppButton
           v-if="!item.read"
-          type="button"
-          class="mark"
-          :disabled="busyId === item.id"
+          variant="ghost"
+          :busy="busyId === item.id"
           @click="markRead(item)"
         >
-          {{ busyId === item.id ? 'Marcando...' : 'Marcar como leída' }}
-        </button>
+          {{ busyId === item.id ? 'Marcando…' : 'Marcar como leída' }}
+        </AppButton>
         <span v-else class="read-tag">Leída</span>
       </li>
     </ul>
-  </main>
+  </section>
 </template>
 
 <style scoped>
-.notifications {
-  max-width: 48rem;
-  margin: 2rem auto;
-  padding: 0 1rem;
+.page-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
 }
 
-header {
-  margin-bottom: 1.5rem;
+.page-title {
+  font-size: var(--text-xl);
 }
 
-.link-button {
-  background: none;
-  border: none;
-  color: var(--color-text);
-  cursor: pointer;
-  padding: 0;
-  font-size: 0.875rem;
+.unread-note {
+  font-size: var(--text-sm);
+  color: var(--color-accent);
 }
 
-.badge {
-  display: inline-block;
-  margin-top: 0.25rem;
-  padding: 0.125rem 0.5rem;
-  border-radius: 999px;
-  background: #c62828;
-  color: #fff;
-  font-size: 0.75rem;
+.calm {
+  color: var(--color-ink-soft);
+}
+
+.state-line {
+  font-size: var(--text-sm);
+  color: var(--color-ink-soft);
 }
 
 .list {
   list-style: none;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  border-top: var(--hairline) solid var(--color-line);
 }
 
-.list li {
+.row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  background: var(--color-background-soft);
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+  border-bottom: var(--hairline) solid var(--color-line);
 }
 
-.list li.unread {
-  border-left: 4px solid #c62828;
+.row-unread .type {
+  color: var(--color-ink);
+}
+
+.row-unread .type::before {
+  content: '';
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
 }
 
 .body {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
+  gap: var(--space-1);
+  min-width: 0;
+  flex: 1;
 }
 
 .type {
-  font-weight: 600;
+  font-weight: 500;
+  color: var(--color-ink-soft);
 }
 
 .meta {
-  font-size: 0.8125rem;
-  color: var(--color-text);
+  font-size: var(--text-xs);
+  color: var(--color-ink-soft);
 }
 
-.mark {
-  padding: 0.375rem 0.75rem;
-  cursor: pointer;
-  white-space: nowrap;
+.see-album {
+  flex: none;
+  font-size: var(--text-sm);
 }
 
 .read-tag {
-  font-size: 0.75rem;
-  color: var(--color-text);
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--color-ink-soft);
 }
 
-.error {
-  color: #c62828;
+@media (max-width: 560px) {
+  .row {
+    flex-wrap: wrap;
+  }
+
+  .body {
+    flex-basis: 100%;
+  }
 }
 </style>

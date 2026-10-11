@@ -1,128 +1,97 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { createAlbum, listAlbums, updateAlbum, type AlbumInput } from '@/services/api'
+import { onMounted } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
+import AppButton from '@/components/ui/AppButton.vue'
+import ErrorNotice from '@/components/ui/ErrorNotice.vue'
+import TextField from '@/components/ui/TextField.vue'
+import { useAlbumForm } from '@/composables/useAlbumForm'
 
 const route = useRoute()
 const router = useRouter()
-
 const albumId = route.params.id ? Number(route.params.id) : null
-const title = ref('')
-const quota = ref<number>(10)
-const password = ref('')
-const error = ref('')
-const loading = ref(albumId !== null)
-const submitting = ref(false)
 
-onMounted(async () => {
-  if (albumId === null) {
-    return
-  }
-  try {
-    const album = (await listAlbums()).find((candidate) => candidate.id === albumId)
-    if (album) {
-      title.value = album.title
-      quota.value = album.quota
-    }
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Error inesperado'
-  } finally {
-    loading.value = false
-  }
-})
+const { title, quota, password, error, loading, submitting, load, save } = useAlbumForm(albumId)
+
+onMounted(load)
 
 async function submit(): Promise<void> {
-  error.value = ''
-  submitting.value = true
-  try {
-    const input: AlbumInput = { title: title.value, quota: quota.value }
-    if (password.value !== '') {
-      input.password = password.value
-    }
-    if (albumId === null) {
-      await createAlbum(input)
-    } else {
-      await updateAlbum(albumId, input)
-    }
+  const created = await save()
+  if (created) {
     await router.push({ name: 'albums' })
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Error inesperado'
-  } finally {
-    submitting.value = false
   }
 }
 </script>
 
 <template>
-  <main class="album-form">
-    <h1>{{ albumId === null ? 'Nuevo álbum' : 'Editar álbum' }}</h1>
+  <section class="album-form">
+    <h1 class="title-serif page-title">
+      {{ albumId === null ? 'Nuevo álbum' : 'Editar álbum' }}
+    </h1>
 
-    <p v-if="loading">Cargando...</p>
+    <p v-if="loading" class="state-line" role="status">Cargando álbum…</p>
+
     <form v-else @submit.prevent="submit">
-      <label>
-        Título
-        <input v-model="title" type="text" required maxlength="255" />
-      </label>
-      <label>
-        Cuota de fotos elegibles
-        <input v-model.number="quota" type="number" min="1" required />
-      </label>
-      <label>
-        Contraseña (opcional)
-        <input v-model="password" type="password" autocomplete="new-password" />
-      </label>
+      <TextField v-model="title" label="Título" required :max-length="255" />
+      <TextField
+        v-model.number="quota"
+        label="Cuota de fotos elegibles"
+        type="number"
+        required
+        :min="1"
+      />
+      <TextField
+        v-model="password"
+        label="Contraseña (opcional)"
+        type="password"
+        autocomplete="new-password"
+        hint="Sin contraseña el álbum queda abierto para quien tenga el enlace."
+      />
 
-      <p v-if="error" class="error" role="alert">{{ error }}</p>
+      <ErrorNotice v-if="error">{{ error }}</ErrorNotice>
 
       <div class="buttons">
-        <button type="submit" :disabled="submitting">
-          {{ submitting ? 'Guardando...' : 'Guardar' }}
-        </button>
-        <RouterLink :to="{ name: 'albums' }">Cancelar</RouterLink>
+        <AppButton type="submit" variant="primary" :busy="submitting">
+          {{ submitting ? 'Guardando…' : 'Guardar' }}
+        </AppButton>
+        <RouterLink class="cancel" :to="{ name: 'albums' }">Cancelar</RouterLink>
       </div>
     </form>
-  </main>
+  </section>
 </template>
 
 <style scoped>
 .album-form {
-  max-width: 24rem;
-  margin: 2rem auto;
-  padding: 0 1rem;
+  max-width: 26rem;
+}
+
+.page-title {
+  font-size: var(--text-xl);
+  margin-bottom: var(--space-5);
+}
+
+.state-line {
+  font-size: var(--text-sm);
+  color: var(--color-ink-soft);
 }
 
 form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-}
-
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.875rem;
-}
-
-input {
-  padding: 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
+  gap: var(--space-4);
 }
 
 .buttons {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
-button {
-  padding: 0.5rem 1rem;
-  cursor: pointer;
+.cancel {
+  font-size: var(--text-sm);
+  color: var(--color-ink-soft);
 }
 
-.error {
-  color: #c62828;
-  font-size: 0.875rem;
+.cancel:hover {
+  color: var(--color-ink);
 }
 </style>
