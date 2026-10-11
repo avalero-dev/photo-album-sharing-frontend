@@ -8,16 +8,17 @@ Single-tenant, learning project. Separate repo from the backend.
 - Vue 3.5 with Composition API and `<script setup>` + TypeScript. Always use this style;
   do not use Options API.
 - Vite 8, Vue Router 5, Pinia 4.
-- Linting: oxlint + ESLint + Prettier (`npm run lint`, `npm run format`).
+- Package manager: pnpm (ver `pnpm-lock.yaml`); no usar `npm`.
+- Linting: oxlint + ESLint + Prettier (`pnpm lint`, `pnpm format`).
 
 ## Commands
 
-- Dev server: `npm run dev` (http://localhost:5173)
-- Build + type-check: `npm run build`
-- Lint (fix): `npm run lint`
-- Format: `npm run format`
+- Dev server: `pnpm dev` (http://localhost:5173)
+- Build + type-check: `pnpm build`
+- Lint (fix): `pnpm lint`
+- Format: `pnpm format`
 
-A task is only done when `npm run build` passes.
+A task is only done when `pnpm build` passes.
 
 ## API access
 
