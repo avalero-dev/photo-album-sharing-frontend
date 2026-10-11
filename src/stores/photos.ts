@@ -28,7 +28,7 @@ export const usePhotosStore = defineStore('photos', () => {
     error.value[albumId] = ''
     try {
       const result = await uploadAdminPhotos(albumId, files)
-      photosByAlbum.value[albumId] = result.photos
+      photosByAlbum.value[albumId] = [...(photosByAlbum.value[albumId] ?? []), ...result.photos]
     } catch (e) {
       error.value[albumId] = e instanceof Error ? e.message : 'Error inesperado'
       throw e
