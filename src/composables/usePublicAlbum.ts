@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import { useToast } from 'vue-toastification'
 import {
   ApiError,
   deselectPublicPhoto,
@@ -15,10 +16,13 @@ import {
 // Galería pública, extraída de PublicGalleryView — tarea 3.3.
 // Metadatos del álbum, carga paginada de fotos al hacer scroll, desbloqueo,
 // marcado/desmarcado dentro de la cuota, finalización y visor ampliado.
+// `error` queda reservado al estado de pantalla (carga/desbloqueo, inline);
+// el feedback transitorio de acciones va a toast (design D2/D4).
 
 export const PUBLIC_PAGE_SIZE = 60
 
 export function usePublicAlbum(token: string) {
+  const toast = useToast()
   const album = ref<PublicAlbumSummary | null>(null)
   const loading = ref(true)
   const notFound = ref(false)
@@ -34,7 +38,6 @@ export function usePublicAlbum(token: string) {
 
   const busyPhotoId = ref<number | null>(null)
   const finalizing = ref(false)
-  const notice = ref('')
   const lightboxPhoto = ref<PublicPhoto | null>(null)
 
   const canSelect = computed(() => album.value?.status === 'SELECTING')
@@ -52,7 +55,6 @@ export function usePublicAlbum(token: string) {
     loading.value = true
     error.value = ''
     notFound.value = false
-    notice.value = ''
     try {
       album.value = await getPublicAlbum(token)
       if (!isLocked.value) {
@@ -133,8 +135,6 @@ export function usePublicAlbum(token: string) {
       openLightbox(photo)
       return
     }
-    error.value = ''
-    notice.value = ''
     busyPhotoId.value = photo.id
     try {
       const result = photo.selected
@@ -142,7 +142,7 @@ export function usePublicAlbum(token: string) {
         : await selectPublicPhoto(token, photo.id)
       applySelection(result)
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Error inesperado'
+      toast.error(e instanceof Error ? e.message : 'Error inesperado')
     } finally {
       busyPhotoId.value = null
     }
@@ -152,14 +152,12 @@ export function usePublicAlbum(token: string) {
     if (!canFinalize.value) {
       return
     }
-    error.value = ''
-    notice.value = ''
     finalizing.value = true
     try {
       album.value = await finalizeSelection(token)
-      notice.value = 'Tu selección quedó registrada. El fotógrafo la preparará.'
+      toast.success('Tu selección quedó registrada. El fotógrafo la preparará.')
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Error inesperado'
+      toast.error(e instanceof Error ? e.message : 'Error inesperado')
     } finally {
       finalizing.value = false
     }
@@ -186,7 +184,6 @@ export function usePublicAlbum(token: string) {
     photosError,
     busyPhotoId,
     finalizing,
-    notice,
     lightboxPhoto,
     canSelect,
     isFinalized,

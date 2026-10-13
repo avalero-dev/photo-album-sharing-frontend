@@ -5,6 +5,7 @@ import PhotoMosaic from '@/components/photos/PhotoMosaic.vue'
 import type { PhotoFrameEntry } from '@/components/photos/PhotoGrid.vue'
 import PhotoLightbox from '@/components/photos/PhotoLightbox.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import ErrorNotice from '@/components/ui/ErrorNotice.vue'
 import ProgressCounter from '@/components/ui/ProgressCounter.vue'
@@ -28,7 +29,6 @@ const {
   photosError,
   busyPhotoId,
   finalizing,
-  notice,
   lightboxPhoto,
   canSelect,
   isFinalized,
@@ -110,10 +110,16 @@ const lightboxSrc = computed(() =>
 )
 const lightboxAlt = computed(() => lightboxPhoto.value?.baseFilename ?? '')
 
-async function onFinish(): Promise<void> {
-  if (!confirm('¿Finalizar la selección? Después no podrás cambiarla.')) {
-    return
-  }
+// Confirmación con diálogo nativo (design D3): finalizar la selección es
+// irreversible, así que la vista captura la intención y el diálogo decide.
+const finalizeConfirmation = ref(false)
+
+function onFinish(): void {
+  finalizeConfirmation.value = true
+}
+
+async function confirmFinalize(): Promise<void> {
+  finalizeConfirmation.value = false
   await finalize()
 }
 
@@ -185,9 +191,6 @@ onBeforeUnmount(() => observer?.disconnect())
       </form>
 
       <section v-else class="sheet">
-        <ErrorNotice v-if="notice" tone="success">{{ notice }}</ErrorNotice>
-        <ErrorNotice v-if="error">{{ error }}</ErrorNotice>
-
         <template v-if="photos.length === 0 && !photosLoading && photosError">
           <ErrorNotice>{{ photosError }}</ErrorNotice>
           <AppButton variant="secondary" @click="retryLoadMore">Reintentar</AppButton>
@@ -245,6 +248,15 @@ onBeforeUnmount(() => observer?.disconnect())
         </AppButton>
       </section>
     </template>
+
+    <ConfirmDialog
+      v-if="finalizeConfirmation"
+      title="Finalizar selección"
+      message="¿Finalizar la selección? Después no podrás cambiarla."
+      confirm-label="Finalizar"
+      @confirm="confirmFinalize"
+      @cancel="finalizeConfirmation = false"
+    />
 
     <PhotoLightbox
       v-if="lightboxPhoto"

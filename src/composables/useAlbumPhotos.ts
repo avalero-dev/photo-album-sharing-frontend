@@ -1,13 +1,16 @@
 import { computed, ref } from 'vue'
+import { useToast } from 'vue-toastification'
 import { openAlbumDelivery, uploadAdminOriginals, type AdminPhoto } from '@/services/api'
 import { useAlbum } from './useAlbum'
 import { usePhotosStore } from '@/stores/photos'
 
 // Pantalla de fotos del álbum, extraída de AdminAlbumPhotosView — tarea 3.2.
 // Reutiliza el store `photos` (estado compartido por álbum) y añade la
-// orquestación de subidas y de apertura de la entrega.
+// orquestación de subidas y de apertura de la entrega. El feedback transitorio
+// de acciones se comunica con toasts (design D2/D4).
 
 export function useAlbumPhotos(albumId: number) {
+  const toast = useToast()
   const photosStore = usePhotosStore()
   const {
     album,
@@ -21,12 +24,8 @@ export function useAlbumPhotos(albumId: number) {
   const photosError = computed(() => photosStore.error[albumId] ?? '')
 
   const uploading = ref(false)
-  const uploadError = ref('')
   const uploadingOriginals = ref(false)
-  const originalError = ref('')
   const openingDelivery = ref(false)
-  const deliveryError = ref('')
-  const notice = ref('')
 
   const selectedPhotos = computed(() => photos.value.filter((photo) => photo.selectedAt !== null))
   const canEdit = computed(() => album.value?.status === 'DRAFT')
@@ -42,11 +41,10 @@ export function useAlbumPhotos(albumId: number) {
 
   async function upload(files: File[]): Promise<void> {
     uploading.value = true
-    uploadError.value = ''
     try {
       await photosStore.upload(albumId, files)
     } catch (e) {
-      uploadError.value = e instanceof Error ? e.message : 'Error inesperado'
+      toast.error(e instanceof Error ? e.message : 'Error inesperado')
     } finally {
       uploading.value = false
     }
@@ -54,8 +52,6 @@ export function useAlbumPhotos(albumId: number) {
 
   async function uploadOriginals(files: File[]): Promise<void> {
     uploadingOriginals.value = true
-    originalError.value = ''
-    notice.value = ''
     try {
       const result = await uploadAdminOriginals(albumId, files)
       await refresh()
@@ -63,9 +59,9 @@ export function useAlbumPhotos(albumId: number) {
       if (result.unmatched > 0) {
         parts.push(`${result.unmatched} sin coincidencia: ${result.unmatchedFilenames.join(', ')}`)
       }
-      notice.value = parts.join(' · ')
+      toast.success(parts.join(' · '))
     } catch (e) {
-      originalError.value = e instanceof Error ? e.message : 'Error inesperado'
+      toast.error(e instanceof Error ? e.message : 'Error inesperado')
     } finally {
       uploadingOriginals.value = false
     }
@@ -73,13 +69,11 @@ export function useAlbumPhotos(albumId: number) {
 
   async function openDelivery(): Promise<void> {
     openingDelivery.value = true
-    deliveryError.value = ''
-    notice.value = ''
     try {
       album.value = await openAlbumDelivery(albumId)
-      notice.value = 'Entrega abierta: el cliente ya puede descargar.'
+      toast.success('Entrega abierta: el cliente ya puede descargar.')
     } catch (e) {
-      deliveryError.value = e instanceof Error ? e.message : 'Error inesperado'
+      toast.error(e instanceof Error ? e.message : 'Error inesperado')
     } finally {
       openingDelivery.value = false
     }
@@ -89,7 +83,7 @@ export function useAlbumPhotos(albumId: number) {
     try {
       await photosStore.remove(albumId, photoId)
     } catch (e) {
-      uploadError.value = e instanceof Error ? e.message : 'Error inesperado'
+      toast.error(e instanceof Error ? e.message : 'Error inesperado')
     }
   }
 
@@ -106,12 +100,8 @@ export function useAlbumPhotos(albumId: number) {
     isLoadingPhotos,
     photosError,
     uploading,
-    uploadError,
     uploadingOriginals,
-    originalError,
     openingDelivery,
-    deliveryError,
-    notice,
     selectedPhotos,
     canEdit,
     canShowSelection,

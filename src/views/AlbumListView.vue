@@ -6,7 +6,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import ErrorNotice from '@/components/ui/ErrorNotice.vue'
 import { useAlbumList } from '@/composables/useAlbum'
 
-const { albums, loading, error, load, publish, busyAlbumId, actionError } = useAlbumList()
+const { albums, loading, error, load, publish, busyAlbumId } = useAlbumList()
 
 onMounted(load)
 </script>
@@ -23,8 +23,6 @@ onMounted(load)
     <p v-if="loading" class="state-line" role="status">Cargando álbumes…</p>
 
     <template v-else>
-      <ErrorNotice v-if="actionError">{{ actionError }}</ErrorNotice>
-
       <EmptyState
         v-if="albums.length === 0"
         title="Todavía no hay álbumes"

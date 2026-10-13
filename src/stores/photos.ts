@@ -24,27 +24,18 @@ export const usePhotosStore = defineStore('photos', () => {
     }
   }
 
+  // `error[albumId]` queda reservado a `fetch()` (design D1): los fallos de
+  // subida/borrado se propagan al composable para presentarse como toast y no
+  // deben ocultar las fotos ya visibles de la hoja de contactos.
   async function upload(albumId: number, files: File[]): Promise<void> {
-    error.value[albumId] = ''
-    try {
-      const result = await uploadAdminPhotos(albumId, files)
-      photosByAlbum.value[albumId] = [...(photosByAlbum.value[albumId] ?? []), ...result.photos]
-    } catch (e) {
-      error.value[albumId] = e instanceof Error ? e.message : 'Error inesperado'
-      throw e
-    }
+    const result = await uploadAdminPhotos(albumId, files)
+    photosByAlbum.value[albumId] = [...(photosByAlbum.value[albumId] ?? []), ...result.photos]
   }
 
   async function remove(albumId: number, photoId: number): Promise<void> {
-    error.value[albumId] = ''
-    try {
-      await deleteAdminPhoto(albumId, photoId)
-      const list = photosByAlbum.value[albumId] ?? []
-      photosByAlbum.value[albumId] = list.filter((photo) => photo.id !== photoId)
-    } catch (e) {
-      error.value[albumId] = e instanceof Error ? e.message : 'Error inesperado'
-      throw e
-    }
+    await deleteAdminPhoto(albumId, photoId)
+    const list = photosByAlbum.value[albumId] ?? []
+    photosByAlbum.value[albumId] = list.filter((photo) => photo.id !== photoId)
   }
 
   return { photosByAlbum, loading, error, fetch, upload, remove }

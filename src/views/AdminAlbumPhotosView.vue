@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import type { PhotoFrameEntry } from '@/components/photos/PhotoGrid.vue'
 import PhotoGrid from '@/components/photos/PhotoGrid.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import ErrorNotice from '@/components/ui/ErrorNotice.vue'
 import ProgressCounter from '@/components/ui/ProgressCounter.vue'
@@ -22,17 +23,14 @@ const {
   isLoadingPhotos,
   photosError,
   uploading,
-  uploadError,
   uploadingOriginals,
-  originalError,
   openingDelivery,
-  deliveryError,
-  notice,
   selectedPhotos,
   canEdit,
   canShowSelection,
   canUploadOriginals,
   canOpenDelivery,
+  refresh,
   upload,
   uploadOriginals,
   openDelivery,
@@ -78,21 +76,32 @@ async function onPickOriginals(event: Event): Promise<void> {
   input.value = ''
 }
 
-async function onDeletePhoto(entry: PhotoFrameEntry): Promise<void> {
+// Confirmaciones con diálogo nativo (design D3): la vista captura el objetivo
+// pendiente y el diálogo decide si la acción continúa.
+const pendingDelete = ref<AdminPhoto | null>(null)
+const deliveryConfirmation = ref(false)
+
+function onDeletePhoto(entry: PhotoFrameEntry): void {
   const photo = photoFor(entry)
-  if (!photo) {
-    return
+  if (photo) {
+    pendingDelete.value = photo
   }
-  if (!confirm(`¿Borrar la foto "${photo.baseFilename}"?`)) {
-    return
-  }
-  await deletePhoto(photo.id)
 }
 
-async function onOpenDelivery(): Promise<void> {
-  if (!confirm('¿Abrir la entrega? El cliente podrá descargar las fotos seleccionadas.')) {
-    return
+async function confirmDeletePhoto(): Promise<void> {
+  const photo = pendingDelete.value
+  pendingDelete.value = null
+  if (photo) {
+    await deletePhoto(photo.id)
   }
+}
+
+function onOpenDelivery(): void {
+  deliveryConfirmation.value = true
+}
+
+async function confirmOpenDelivery(): Promise<void> {
+  deliveryConfirmation.value = false
   await openDelivery()
 }
 
@@ -114,8 +123,6 @@ init()
 
     <ErrorNotice v-if="albumError">{{ albumError }}</ErrorNotice>
 
-    <ErrorNotice v-if="notice" tone="success">{{ notice }}</ErrorNotice>
-
     <section v-if="canEdit" class="section">
       <h2 class="section-title">Subida web</h2>
       <p class="section-desc">Sube las fotos web (JPEG) que verá el cliente.</p>
@@ -134,8 +141,6 @@ init()
         }}</label>
       </div>
     </section>
-
-    <ErrorNotice v-if="uploadError">{{ uploadError }}</ErrorNotice>
 
     <section v-if="canShowSelection" class="section">
       <h2 class="section-title">Selección</h2>
@@ -169,8 +174,6 @@ init()
       </div>
     </section>
 
-    <ErrorNotice v-if="deliveryError">{{ deliveryError }}</ErrorNotice>
-
     <section v-if="canUploadOriginals" class="section">
       <h2 class="section-title">Originales</h2>
       <p class="section-desc">
@@ -191,46 +194,77 @@ init()
       </div>
     </section>
 
-    <ErrorNotice v-if="originalError">{{ originalError }}</ErrorNotice>
-
     <section class="section">
       <h2 class="section-title">Hoja de contactos</h2>
 
       <p v-if="isLoadingPhotos" class="state-line" role="status">Cargando fotos…</p>
 
-      <ErrorNotice v-else-if="photosError">{{ photosError }}</ErrorNotice>
+      <!-- El error de carga del listado es persistente y permite reintentar,
+           pero no oculta las fotos ya visibles (ui-feedback: "Listado que no
+           carga"). -->
+      <template v-else>
+        <div v-if="photosError" class="retry-line">
+          <ErrorNotice>{{ photosError }}</ErrorNotice>
+          <AppButton variant="secondary" @click="refresh">Reintentar</AppButton>
+        </div>
 
-      <EmptyState
-        v-else-if="photos.length === 0"
-        title="Este álbum todavía no tiene fotos"
-        :description="
-          canEdit
-            ? 'Sube las fotos web para empezar a revisarlas.'
-            : 'Aún no hay fotos para revisar.'
-        "
-      />
+        <EmptyState
+          v-if="photos.length === 0 && !photosError"
+          title="Este álbum todavía no tiene fotos"
+          :description="
+            canEdit
+              ? 'Sube las fotos web para empezar a revisarlas.'
+              : 'Aún no hay fotos para revisar.'
+          "
+        />
 
-      <PhotoGrid v-else :photos="entries" :src-for="srcFor" :busy-id="null" @delete="onDeletePhoto">
-        <template #footer="{ photo }">
-          <span v-if="canShowSelection" class="frame-markers">
-            <StatusMarker
-              v-if="photo.selected && photo.hasOriginal"
-              tone="ready"
-              text="Con original"
-            />
-            <StatusMarker v-else-if="photo.selected" tone="neutral" text="Pendiente" />
-          </span>
-          <AppButton
-            v-if="canEdit"
-            variant="ghost"
-            class="ghost-danger"
-            @click="onDeletePhoto(photo)"
-          >
-            Borrar
-          </AppButton>
-        </template>
-      </PhotoGrid>
+        <PhotoGrid
+          v-if="photos.length > 0"
+          :photos="entries"
+          :src-for="srcFor"
+          :busy-id="null"
+          @delete="onDeletePhoto"
+        >
+          <template #footer="{ photo }">
+            <span v-if="canShowSelection" class="frame-markers">
+              <StatusMarker
+                v-if="photo.selected && photo.hasOriginal"
+                tone="ready"
+                text="Con original"
+              />
+              <StatusMarker v-else-if="photo.selected" tone="neutral" text="Pendiente" />
+            </span>
+            <AppButton
+              v-if="canEdit"
+              variant="ghost"
+              class="ghost-danger"
+              @click="onDeletePhoto(photo)"
+            >
+              Borrar
+            </AppButton>
+          </template>
+        </PhotoGrid>
+      </template>
     </section>
+
+    <ConfirmDialog
+      v-if="pendingDelete"
+      title="Borrar foto"
+      :message="`¿Borrar la foto «${pendingDelete.baseFilename}»? No se puede deshacer.`"
+      confirm-label="Borrar"
+      danger
+      @confirm="confirmDeletePhoto"
+      @cancel="pendingDelete = null"
+    />
+
+    <ConfirmDialog
+      v-if="deliveryConfirmation"
+      title="Abrir entrega"
+      message="¿Abrir la entrega? El cliente podrá descargar las fotos seleccionadas."
+      confirm-label="Abrir entrega"
+      @confirm="confirmOpenDelivery"
+      @cancel="deliveryConfirmation = false"
+    />
   </section>
 </template>
 
@@ -331,6 +365,13 @@ init()
 .state-line {
   font-size: var(--text-sm);
   color: var(--color-ink-soft);
+}
+
+.retry-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .frame-markers {
