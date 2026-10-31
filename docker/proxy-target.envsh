@@ -1,0 +1,10 @@
+# Restrict the nginx envsubst template pass to the variables this app owns.
+#
+# The nginx entrypoint substitutes every environment variable found in
+# /etc/nginx/templates/*.template, which would also clobber nginx runtime
+# variables such as $host or $uri. Setting NGINX_ENVSUBST_FILTER narrows the
+# substitution to the proxy target and the listen port only.
+#
+# This file uses the ".envsh" extension so the nginx entrypoint sources it
+# (and thus exports the filter) before running 20-envsubst-on-templates.sh.
+export NGINX_ENVSUBST_FILTER='^(BACKEND_URL|LISTEN_PORT)$'

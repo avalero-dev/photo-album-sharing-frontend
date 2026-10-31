@@ -1,4 +1,13 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
+// Base URL of the API.
+//
+// Empty (the default) means "same origin": the browser calls the relative
+// /api paths and the frontend's own server proxies them to the backend. This
+// is what the container stack uses, so the app never needs to know the host
+// address and LAN clients work unchanged.
+//
+// Local development sets VITE_API_BASE_URL (see .env) to call the backend
+// directly on http://localhost:8080.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
 export interface HealthResponse {
   status: string

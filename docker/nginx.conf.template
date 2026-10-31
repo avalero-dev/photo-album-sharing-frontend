@@ -1,0 +1,65 @@
+# Template rendered at container start by the nginx entrypoint
+# (envsubst on /etc/nginx/templates/*.template).
+#
+# ${BACKEND_URL} - upstream the /api routes are forwarded to. Configured at
+#   runtime, so the same image can point at different backends without a
+#   rebuild.
+# ${LISTEN_PORT} - port nginx listens on inside the container.
+
+server {
+    listen       ${LISTEN_PORT};
+    listen       [::]:${LISTEN_PORT};
+    server_name  _;
+
+    root   /usr/share/nginx/html;
+    index  index.html;
+
+    # Uploads of originals can be large; keep the body limit above the
+    # backend limits (120MB file / 150MB request).
+    client_max_body_size 150m;
+
+    gzip              on;
+    gzip_types        text/css application/javascript application/json image/svg+xml;
+    gzip_min_length   1024;
+
+    # Same-origin API proxy. The browser always calls relative /api paths on
+    # the frontend origin, so no host address is ever configured in the app.
+    #
+    # $http_host keeps the host AND the port the client used. The backend
+    # compares that value with the browser's Origin header to decide whether a
+    # request is same-origin; forwarding the original authority makes the
+    # proxied request look same-origin to the backend (e.g.
+    # "http://192.168.100.27:8080"), so no CORS allowance is needed and the
+    # session cookie works from any LAN address.
+    location /api/ {
+        proxy_pass         ${BACKEND_URL};
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $http_host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   X-Forwarded-Host  $http_host;
+        proxy_set_header   X-Forwarded-Port  $server_port;
+
+        # Streaming of large uploads and downloads.
+        proxy_request_buffering  off;
+        proxy_read_timeout       300s;
+        proxy_send_timeout       300s;
+    }
+
+    # SPA history routing: unknown paths fall back to index.html.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Hashed build assets are immutable.
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+    }
+}
