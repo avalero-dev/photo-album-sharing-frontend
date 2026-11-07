@@ -34,7 +34,7 @@ A task is only done when `pnpm build` passes.
 
 # Full local stack (Docker Compose)
 
-The frontend, the backend, PostgreSQL and MongoDB run together as four Compose
+The frontend, the backend and PostgreSQL run together as three Compose
 services. The Compose file lives in the **backend** repo, because that is where
 the database definitions and volumes already are.
 
@@ -53,8 +53,8 @@ the database definitions and volumes already are.
   directory is missing or renamed, the frontend build fails.
 
 - Port `8080` free on the host (change it with `FRONTEND_PORT`).
-- Ports `5432` and `27017` free **on the loopback interface** of the host (the
-  databases are published on `127.0.0.1` only).
+- Port `5432` free **on the loopback interface** of the host (the database is
+  published on `127.0.0.1` only).
 
 ## Start
 
@@ -86,13 +86,11 @@ FRONTEND_PORT=9090 docker compose up --build
 | frontend  | `0.0.0.0:8080` (all ifaces)  | yes           | **yes**                |
 | backend   | none (Compose network only)  | via proxy     | no                     |
 | postgres  | `127.0.0.1:5432` (loopback)  | yes           | no                     |
-| mongo     | `127.0.0.1:27017` (loopback) | yes           | no                     |
 
-Only the **frontend** is reachable from other devices of the LAN. The databases
-keep their ports on the loopback interface so that host-local tools keep
-working (`./gradlew bootRun`, the Vite dev server, `psql`, `mongosh`), but they
-are **not** reachable from other LAN devices and cannot be used to bypass the
-frontend.
+Only the **frontend** is reachable from other devices of the LAN. The database
+keeps its port on the loopback interface so that host-local tools keep
+working (`./gradlew bootRun`, the Vite dev server, `psql`), but it is **not**
+reachable from other LAN devices and cannot be used to bypass the frontend.
 
 ## Access from another device of the LAN
 
@@ -101,8 +99,8 @@ also acts as the API proxy. The browser therefore talks to the same origin
 (`http://<host-lan-ip>:8080`) and calls the API through the relative `/api`
 paths; the host address is **never** configured inside the application.
 
-The backend, PostgreSQL and MongoDB are **not** reachable from the other
-devices: the backend has no published port at all, and the databases are bound
+The backend and PostgreSQL are **not** reachable from the other
+devices: the backend has no published port at all, and the database is bound
 to `127.0.0.1` on the host. Another device of the LAN can only use the
 frontend.
 
@@ -145,21 +143,19 @@ LAN.
                    frontend (nginx)  0.0.0.0:8080
                           │  /api/*  (same origin)
                           ▼
-                   backend (Spring Boot)  no published port
-                          │
-              ┌───────────┴───────────┐
-              ▼                       ▼
-          postgres                mongo
-      127.0.0.1:5432         127.0.0.1:27017
-      (loopback only)        (loopback only)
+                    backend (Spring Boot)  no published port
+                           |
+                           v
+                       postgres
+                   127.0.0.1:5432
+                   (loopback only)
 ```
-
 - The backend declares no published port; it is reachable only from the Compose
   network.
-- PostgreSQL and MongoDB publish their ports on the host loopback interface, so
-  host-local tools can use them but LAN devices cannot reach them.
-- The Compose network DNS names `postgres` and `mongo` are passed to the backend
-  as `POSTGRES_HOST` and `MONGO_HOST`.
+- PostgreSQL publishes its port on the host loopback interface, so
+  host-local tools can use it but LAN devices cannot reach it.
+- The Compose network DNS name `postgres` is passed to the backend
+  as `POSTGRES_HOST`.
 - The proxy forwards the original `Host` header (host **and** port) as
   `Host` and `X-Forwarded-Host`. The backend compares that authority with the
   browser's `Origin` header to decide whether a request is same-origin, so the
@@ -203,7 +199,6 @@ resolved at runtime.
 ## Persistence
 
 - PostgreSQL data lives in the `postgres-data` named volume.
-- MongoDB data lives in the `mongo-data` named volume.
 - Photo bytes live in `../photo-manager-backend/var/storage`, bind-mounted into
   the backend container. The host directory must be readable and writable by the
   container user.
@@ -239,7 +234,7 @@ docker compose down -v
 The Vite dev server keeps calling the backend directly, as before:
 
 ```sh
-cd ../photo-manager-backend && docker compose up -d postgres mongo
+cd ../photo-manager-backend && docker compose up -d postgres
 ./gradlew bootRun          # API on http://localhost:8080
 
 cd ../photo-manager-frontend
@@ -249,7 +244,7 @@ pnpm dev                   # SPA on http://localhost:5173
 `VITE_API_BASE_URL` (see `.env`) points the browser at the API directly; the
 backend allows that origin through `CORS_ALLOWED_ORIGINS`.
 
-The databases published on `127.0.0.1:5432` and `127.0.0.1:27017` are the ones
+The database published on `127.0.0.1:5432` is the one
 the host-local `bootRun` backend and the Vite dev server connect to. Because
-they are bound to the loopback interface, they stay usable from the host while
+it is bound to the loopback interface, it stays usable from the host while
 remaining unreachable from other devices of the LAN.
